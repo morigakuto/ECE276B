@@ -7,3 +7,6 @@ __pycache__/
 env/
 venv/
 .venv/
+/paper
+/starter_code/reports/
+.DS_Store
