@@ -15,5 +15,18 @@ This file contains a class defining a node for the A* algorithm as well as an in
 ### 4. maps
 This folder contains 7 test environments described via a rectangular outer boundary and a list of rectangular obstacles. The start and goal points for each environment are specified in main.py.
 
+### 5. Batch evaluation utility
+The helper script `run_all_planners.py` (callable as `python -m starter_code.run_all_planners`) runs every planner in `Planner.py` on the benchmark maps, records runtime and path-quality statistics, and saves 3-D visualizations. By default it creates a timestamped folder under `starter_code/reports/` containing:
+
+- `summary.json` and `summary.csv` with aggregate metrics.
+- One subdirectory per planner with per-map images (`.png`), raw waypoint exports (`_path.csv`), and detailed metrics (`_metrics.json`).
+
+You can limit the run to a subset of planners or maps:
+
+```
+python -m starter_code.run_all_planners --planners MyAStarPlanner MyRRTStarPlanner --maps maze window
+```
+
+To change the output location, pass `--output-root <dir>`. Long runs can be launched inside a terminal multiplexer (e.g. `tmux` or `screen`) so you can detach while results are generated; install one via your package manager if you do not already have it.
 
 
