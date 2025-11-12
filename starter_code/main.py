@@ -93,10 +93,13 @@ def runtest(mapfile, start, goal, verbose = True):
   # MP = Planner.MyPart1AABBPlanner(boundary, blocks)
 
   # Part 2: A* Planner
-  MP = Planner.MyAStarPlanner(boundary, blocks)
-  
+  # MP = Planner.MyAStarPlanner(boundary, blocks)
+
   # Part 3: RRT Planner
   # MP = Planner.MyRRTPlanner(boundary, blocks)
+  
+  # Part 3: RRTStar Planner
+  MP = Planner.MyRRTStarPlanner(boundary, blocks)
   
   # Display the environment
   if verbose:
