@@ -1,6 +1,7 @@
 import numpy as np
-
+from scipy.spatial import KDTree
 from astar import AStar
+from rrt import RRT, RRTStar
 
 def segment_block_collision(p1, p2, block):
   
@@ -248,15 +249,158 @@ class MyAStarPlanner(MyPlanner):
     
     return tuple(np.round(np.asarray(coord) / self.step_size).astype(int))
 
-# Part 3: RRT Planner (将来的に追加)
-class MyRRTPlanner:
-  __slots__ = ['boundary', 'blocks']
+# Part 3: RRT Planner
+class MyRRTPlanner(MyPlanner):
+  __slots__ = ['boundary', 'blocks', 'goal', 'step_size', 'stats']
 
-  def __init__(self, boundary, blocks):
-    self.boundary = boundary
-    self.blocks = blocks
-    # RRTに必要な情報をここで初期化
+  def __init__(self, boundary, blocks, step_size=0.275):
+    super().__init__(boundary, blocks)
+    self.step_size = step_size
+    self.stats = {}  # Initialize stats
 
   def plan(self, start, goal):
-    # RRTアルゴリズムをここに実装
-    pass
+    self.goal = goal
+    result = RRT.plan(start, goal, self)
+
+    # Handle both old and new return format
+    if isinstance(result, tuple):
+        path, self.stats = result
+    else:
+        path = result
+        self.stats = {}
+
+    path = np.array(path)
+    return path
+  
+  def getRandomPoint(self):
+    boundary = self.boundary
+    while True:
+        x = np.random.uniform(boundary[0, 0], boundary[0, 3])
+        y = np.random.uniform(boundary[0, 1], boundary[0, 4])
+        z = np.random.uniform(boundary[0, 2], boundary[0, 5])
+        if self.is_valid_point(np.array([x,y,z])):
+            return np.array([x,y,z])
+        
+  def getNearestNode(self, V, kdtree, point):
+    dist, idx = kdtree.query(point, k=1)
+    return V[idx]
+
+  def Steer(self, from_node, to_point, step_size):
+    direction = to_point - from_node.coord
+    length = np.linalg.norm(direction)
+    if length == 0.0:
+        return from_node.coord
+    if length < step_size:
+        return to_point
+    else:
+      direction = direction / length
+      new_point = from_node.coord + step_size * direction
+      return new_point
+
+  def checkCollision(self, p1, p2):
+    for block in self.blocks:
+        if segment_block_collision(np.asarray(p1), np.asarray(p2), block):
+            return True
+    return False
+  
+class MyRRTStarPlanner(MyRRTPlanner):
+  __slots__ = ['boundary', 'blocks', 'goal', 'step_size', 'stats', 'vol_free', 'gamma_rrt_star', 'max_rewire_radius']
+
+  def __init__(self, boundary, blocks, step_size=0.275, radius=None):
+    super().__init__(boundary, blocks, step_size)
+
+    boundary_vol = (self.boundary[0, 3] - self.boundary[0, 0]) * \
+                   (self.boundary[0, 4] - self.boundary[0, 1]) * \
+                   (self.boundary[0, 5] - self.boundary[0, 2])
+    obstacle_vol = 0
+    for block in self.blocks:
+        obstacle_vol += (block[3] - block[0]) * \
+                        (block[4] - block[1]) * \
+                        (block[5] - block[2])
+    self.vol_free = boundary_vol - obstacle_vol
+    if self.vol_free <= 0: self.vol_free = 1e-6 
+
+    d = 3.0 
+    vol_unit_ball = (4.0/3.0) * np.pi
+    self.gamma_rrt_star = 2.0 * ((1.0 + 1.0/d) ** (1.0/d)) * ((self.vol_free / vol_unit_ball) ** (1.0/d))
+
+    if radius is None:
+      extents = self.boundary[0, 3:6] - self.boundary[0, 0:3]
+      diagonal = np.linalg.norm(extents)
+      self.max_rewire_radius = max(self.step_size, diagonal)
+    else:
+      self.max_rewire_radius = max(self.step_size, radius)
+
+  def plan(self, start, goal):
+    self.goal = goal
+    result = RRTStar.plan(start, goal, self)
+
+    # Handle both old and new return format
+    if isinstance(result, tuple):
+        path, self.stats = result
+    else:
+        path = result
+        self.stats = {}
+
+    path = np.array(path)
+    return path
+
+  def get_dynamic_radius(self, num_nodes):
+    d = 3.0
+    if num_nodes < 2:
+        return self.step_size 
+    r_star = self.gamma_rrt_star * ((np.log(num_nodes) / num_nodes) ** (1.0/d))
+  
+    return min(r_star, self.max_rewire_radius)
+  
+  def getNeighborNodes(self, V, kdtree, point, radius):
+    idxs = kdtree.query_ball_point( point, r=radius)
+    neighbors = [V[idx] for idx in idxs]
+    return neighbors
+
+  def chooseParent(self, V, kdtree, new, radius):
+    neighbors_nodes = self.getNeighborNodes(V, kdtree, new.coord, radius)
+    current_parent = new.parent
+    best_parent = current_parent
+    best_edge_cost = np.linalg.norm(new.coord - current_parent.coord) if current_parent is not None else None
+    min_cost = new.cost
+
+    for neighbor in neighbors_nodes:
+      if neighbor is new:
+        continue
+      edge_cost = np.linalg.norm(neighbor.coord - new.coord)
+      potential_cost = neighbor.cost + edge_cost
+      if potential_cost < min_cost:
+        if not self.checkCollision(neighbor.coord, new.coord):
+          min_cost = potential_cost
+          best_parent = neighbor
+          best_edge_cost = edge_cost
+
+    if best_parent is not None:
+      new.set_parent(best_parent, best_edge_cost)
+    else:
+      new.set_parent(None, min_cost)
+
+    return new.parent, new.cost
+
+  def _update_descendant_costs(self, root):
+    stack = list(root.children)
+    while stack:
+      current = stack.pop()
+      if current.parent is None:
+        stack.extend(current.children)
+        continue
+      current.cost = current.parent.cost + np.linalg.norm(current.coord - current.parent.coord)
+      stack.extend(current.children)
+
+  def Rewiring(self, V, kdtree, new_node, radius):
+    neighbor_nodes = self.getNeighborNodes(V, kdtree, new_node.coord, radius)
+    for neighbor in neighbor_nodes:
+      if neighbor == new_node.parent or neighbor is new_node:
+        continue
+      edge_cost = np.linalg.norm(new_node.coord - neighbor.coord)
+      potential_cost = new_node.cost + edge_cost
+      if potential_cost < neighbor.cost:
+        if not self.checkCollision(new_node.coord, neighbor.coord):
+          neighbor.set_parent(new_node, edge_cost)
+          self._update_descendant_costs(neighbor)

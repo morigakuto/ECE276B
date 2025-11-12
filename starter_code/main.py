@@ -110,10 +110,6 @@ def runtest(mapfile, start, goal, verbose = True):
   # Plot the path
   if verbose:
     ax.plot(path[:,0],path[:,1],path[:,2],'r-')
-
-  # TODO: You should verify whether the path actually intersects any of the obstacles in continuous space
-  # TODO: You can implement your own algorithm or use an existing library for segment and 
-  #       axis-aligned bounding box (AABB) intersection
   
   collision = False
   for i in range(path.shape[0]-1):
