@@ -189,12 +189,13 @@ class MyPart1AABBPlanner(MyPlanner):
   
 # Part 2: A* Planner
 class MyAStarPlanner(MyPlanner):
-  __slots__ = ['boundary', 'blocks', 'goal', 'step_size']
+  __slots__ = ['boundary', 'blocks', 'goal', 'step_size', 'stats']
 
   def __init__(self, boundary, blocks, step_size=0.275):
     super().__init__(boundary, blocks)
     self.goal = None
     self.step_size = step_size
+    self.stats = {}  # Initialize stats
     
   def _directional_vectors(self, step=None):
     if step is None:
@@ -207,8 +208,15 @@ class MyAStarPlanner(MyPlanner):
 
   def plan(self, start, goal):
     self.goal = goal
-    path_coords = AStar.plan(start, goal, self)
-    
+    result = AStar.plan(start, goal, self)
+
+    # Handle both old and new return format
+    if isinstance(result, tuple):
+        path_coords, self.stats = result
+    else:
+        path_coords = result
+        self.stats = {}
+
     return np.array(path_coords)
 
   def getHeuristic(self, coord):

@@ -25,19 +25,27 @@ class AStar:
 
     Graph = {}
     OPEN = pqdict()
+    nodes_expanded = 0
 
     start_key = environment.coord_to_key(start_coord)
     start_node = AStarNode(start_key, start_coord, environment.getHeuristic(start_coord))
     start_node.g = 0.0
     Graph[start_key] = start_node
     OPEN[start_key] = start_node.g + start_node.h
-    
+
     while OPEN:
       current_key, _ = OPEN.popitem()
       current_node = Graph[current_key]
+      nodes_expanded += 1
 
       if np.linalg.norm(current_node.coord - goal_coord) <= np.sqrt(0.1):
-        return AStar.reconstruct_path(current_node)
+
+        path = AStar.reconstruct_path(current_node)
+        stats = {
+            'nodes_considered': len(Graph),
+            'nodes_expanded': nodes_expanded
+        }
+        return path, stats
 
       current_node.closed = True
 
@@ -63,7 +71,11 @@ class AStar:
         else:
           continue
 
-    raise RuntimeError("A* search failed to find a path to the goal.")
+    stats = {
+        'nodes_considered': len(Graph),
+        'nodes_expanded': nodes_expanded
+    }
+    raise RuntimeError(f"A* search failed to find a path to the goal. Explored {nodes_expanded} nodes.")
   
   @staticmethod
   def reconstruct_path(goal_node):
